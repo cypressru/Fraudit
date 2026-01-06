@@ -266,7 +266,12 @@ class SyncPanel(Static):
 
     def refresh_sync(self) -> None:
         with get_session() as s:
-            sources = ["cmbl", "socrata_payments", "lbb_contracts", "usaspending", "txsmartbuy"]
+            # All configured sync sources
+            sources = [
+                "cmbl", "socrata_payments", "lbb_contracts", "usaspending",
+                "txsmartbuy", "sam_exclusions", "employee_salaries",
+                "campaign_finance", "tax_permits"
+            ]
             lines = []
 
             for source in sources:
@@ -277,19 +282,18 @@ class SyncPanel(Static):
                 if latest:
                     if latest.status == SyncStatusEnum.SUCCESS:
                         icon = "[green]●[/green]"
-                        status = "[green]synced[/green]"
+                        status = "[green]ok[/green]"
                     elif latest.status == SyncStatusEnum.FAILED:
                         icon = "[red]●[/red]"
-                        status = "[red]failed[/red]"
+                        status = "[red]fail[/red]"
                     else:
                         icon = "[yellow]●[/yellow]"
-                        status = "[yellow]running[/yellow]"
+                        status = "[yellow]...[/yellow]"
 
-                    time_str = latest.started_at.strftime("%m/%d %H:%M") if latest.started_at else ""
                     records = f"{latest.records_synced:,}" if latest.records_synced else "0"
-                    lines.append(f"{icon} [b]{source:<16}[/b] {records:>10} rec   {status}")
+                    lines.append(f"{icon} {source:<18} {records:>8} {status}")
                 else:
-                    lines.append(f"[dim]○ {source:<16} never synced[/dim]")
+                    lines.append(f"[dim]○ {source:<18} --[/dim]")
 
         self.query_one("#sync-list", Static).update("\n".join(lines))
 
@@ -1673,104 +1677,74 @@ class StatsScreen(ScrollableContainer):
     """Statistics and visualizations screen."""
 
     def compose(self) -> ComposeResult:
-        yield Static("[b]STATISTICS & ANALYTICS[/b]", classes="section-title")
+        # === Overview ===
+        yield Static("[b]OVERVIEW[/b]", classes="section-title")
         yield Static("", id="summary-stats", classes="summary-box")
         yield Rule()
-        yield Static("[b]HUB VENDOR DISTRIBUTION[/b]", classes="section-title")
-        yield Static("", id="hub-chart", classes="chart-box")
-        yield Rule()
-        yield Static("[b]HUB VENDOR DISTRIBUTION (PIE CHART)[/b]", classes="section-title")
-        yield Static("", id="hub-pie-chart", classes="chart-box")
-        yield Rule()
-        yield Static("[b]SPENDING BY HUB CATEGORY[/b]", classes="section-title")
-        yield Static("", id="hub-spending-chart", classes="chart-box")
-        yield Rule()
-        yield Static("[b]HUB vs NON-HUB SPENDING COMPARISON[/b]", classes="section-title")
-        yield Static("", id="hub-vs-nonhub-chart", classes="chart-box")
-        yield Rule()
-        yield Static("[b]PAYMENT SIZE DISTRIBUTION[/b]", classes="section-title")
-        yield Static("", id="payment-size-chart", classes="chart-box")
-        yield Rule()
-        yield Static("[b]CONTRACT DURATION ANALYSIS[/b]", classes="section-title")
-        yield Static("", id="contract-duration-chart", classes="chart-box")
-        yield Rule()
-        yield Static("[b]VENDOR STATE DISTRIBUTION (TOP 10)[/b]", classes="section-title")
-        yield Static("", id="vendor-state-chart", classes="chart-box")
+
+        # === Spending Analysis ===
+        yield Static("[b]TOP AGENCIES BY SPENDING[/b]", classes="section-title")
+        yield Static("", id="agency-chart", classes="chart-box")
         yield Rule()
         yield Static("[b]PAYMENTS BY FISCAL YEAR[/b]", classes="section-title")
         yield Static("", id="fy-chart", classes="chart-box")
         yield Rule()
-        yield Static("[b]TOP AGENCIES BY SPENDING[/b]", classes="section-title")
-        yield Static("", id="agency-chart", classes="chart-box")
+        yield Static("[b]PAYMENT SIZE DISTRIBUTION[/b]", classes="section-title")
+        yield Static("", id="payment-size-chart", classes="chart-box")
         yield Rule()
-        yield Static("[b]AGENCY RISK RANKING (TOP 10 BY ALERTS)[/b]", classes="section-title")
-        yield Static("", id="agency-risk-chart", classes="chart-box")
+
+        # === HUB Program ===
+        yield Static("[b cyan]═══ HUB PROGRAM ANALYSIS ═══[/b cyan]", classes="section-title")
         yield Rule()
-        yield Static("[b]ALERT DISTRIBUTION[/b]", classes="section-title")
+        yield Static("[b]HUB VENDOR DISTRIBUTION[/b]", classes="section-title")
+        yield Static("", id="hub-chart", classes="chart-box")
+        yield Rule()
+        yield Static("[b]HUB vs NON-HUB SPENDING[/b]", classes="section-title")
+        yield Static("", id="hub-vs-nonhub-chart", classes="chart-box")
+        yield Rule()
+
+        # === Vendors ===
+        yield Static("[b]VENDOR STATE DISTRIBUTION[/b]", classes="section-title")
+        yield Static("", id="vendor-state-chart", classes="chart-box")
+        yield Rule()
+        yield Static("[b]CONTRACT DURATION[/b]", classes="section-title")
+        yield Static("", id="contract-duration-chart", classes="chart-box")
+        yield Rule()
+
+        # === Alerts ===
+        yield Static("[b yellow]═══ ALERTS & RISK ═══[/b yellow]", classes="section-title")
+        yield Rule()
+        yield Static("[b]ALERT DISTRIBUTION BY TYPE[/b]", classes="section-title")
         yield Static("", id="alert-chart", classes="chart-box")
         yield Rule()
-        yield Static("[b]ALERT TREND BY MONTH (LAST 12 MONTHS)[/b]", classes="section-title")
-        yield Static("", id="alert-trend-chart", classes="chart-box")
+        yield Static("[b]AGENCY RISK RANKING[/b]", classes="section-title")
+        yield Static("", id="agency-risk-chart", classes="chart-box")
         yield Rule()
-        yield Static("[b]NEW VENDORS PER MONTH (LAST 12 MONTHS)[/b]", classes="section-title")
-        yield Static("", id="new-vendors-chart", classes="chart-box")
+
+        # === Debarment (SAM.gov) ===
+        yield Static("[b red]═══ DEBARMENT SCREENING ═══[/b red]", classes="section-title")
         yield Rule()
-        yield Static("[b]ALERT SEVERITY DISTRIBUTION (PIE CHART)[/b]", classes="section-title")
-        yield Static("", id="alert-severity-pie-chart", classes="chart-box")
+        yield Static("[b]SAM.GOV EXCLUSIONS[/b]", classes="section-title")
+        yield Static("", id="debarment-summary", classes="chart-box")
         yield Rule()
-        # === Cross-Reference & Fraud Detection Visualizations ===
-        yield Static("[b cyan]═══ CROSS-REFERENCE ANALYTICS ═══[/b cyan]", classes="section-title")
+        yield Static("[b]DEBARMENT ALERTS[/b]", classes="section-title")
+        yield Static("", id="debarment-alerts", classes="chart-box")
         yield Rule()
-        yield Static("[b]EMPLOYEE DATA SUMMARY[/b]", classes="section-title")
-        yield Static("", id="employee-summary", classes="chart-box")
+
+        # === Cross-Reference Detection ===
+        yield Static("[b magenta]═══ CROSS-REFERENCE DETECTION ═══[/b magenta]", classes="section-title")
         yield Rule()
-        yield Static("[b]TOP AGENCIES BY EMPLOYEE COUNT[/b]", classes="section-title")
-        yield Static("", id="employee-agency-chart", classes="chart-box")
-        yield Rule()
-        yield Static("[b]SALARY DISTRIBUTION[/b]", classes="section-title")
-        yield Static("", id="salary-dist-chart", classes="chart-box")
-        yield Rule()
-        yield Static("[b]EMPLOYEE-VENDOR NAME MATCHES (CONFLICT OF INTEREST)[/b]", classes="section-title")
+        yield Static("[b]EMPLOYEE-VENDOR CONFLICTS[/b]", classes="section-title")
         yield Static("", id="employee-vendor-matches", classes="chart-box")
         yield Rule()
-        yield Static("[b]CAMPAIGN FINANCE SUMMARY[/b]", classes="section-title")
-        yield Static("", id="campaign-summary", classes="chart-box")
-        yield Rule()
-        yield Static("[b]TOP CAMPAIGN CONTRIBUTORS[/b]", classes="section-title")
-        yield Static("", id="top-contributors-chart", classes="chart-box")
-        yield Rule()
-        yield Static("[b]PAY-TO-PLAY DETECTION (VENDORS WHO ARE CONTRIBUTORS)[/b]", classes="section-title")
+        yield Static("[b]PAY-TO-PLAY DETECTION[/b]", classes="section-title")
         yield Static("", id="pay-to-play-chart", classes="chart-box")
-        yield Rule()
-        yield Static("[b]TAX PERMIT STATUS OF VENDORS[/b]", classes="section-title")
-        yield Static("", id="tax-permit-status", classes="chart-box")
         yield Rule()
         yield Static("[b]GHOST VENDOR INDICATORS[/b]", classes="section-title")
         yield Static("", id="ghost-vendor-chart", classes="chart-box")
         yield Rule()
-        yield Static("[b]FISCAL YEAR END SPENDING ANALYSIS[/b]", classes="section-title")
+        yield Static("[b]FISCAL YEAR-END SPENDING[/b]", classes="section-title")
         yield Static("", id="fy-end-spending-chart", classes="chart-box")
-        yield Rule()
-        yield Static("[b]CROSS-REFERENCE MATCHES SUMMARY[/b]", classes="section-title")
-        yield Static("", id="crossref-summary", classes="chart-box")
-        yield Rule()
-        yield Static("[b]HIGH-VALUE VENDORS WITHOUT TAX PERMITS[/b]", classes="section-title")
-        yield Static("", id="vendors-no-permit-chart", classes="chart-box")
-        yield Rule()
-        # === Debarment/SAM.gov Exclusions ===
-        yield Static("[b red]═══ DEBARMENT & EXCLUSION SCREENING ═══[/b red]", classes="section-title")
-        yield Rule()
-        yield Static("[b]SAM.GOV EXCLUSIONS SUMMARY[/b]", classes="section-title")
-        yield Static("", id="debarment-summary", classes="chart-box")
-        yield Rule()
-        yield Static("[b]EXCLUSIONS BY TYPE[/b]", classes="section-title")
-        yield Static("", id="exclusion-type-chart", classes="chart-box")
-        yield Rule()
-        yield Static("[b]EXCLUSIONS BY AGENCY[/b]", classes="section-title")
-        yield Static("", id="exclusion-agency-chart", classes="chart-box")
-        yield Rule()
-        yield Static("[b]DEBARMENT ALERTS[/b]", classes="section-title")
-        yield Static("", id="debarment-alerts", classes="chart-box")
 
     def on_mount(self) -> None:
         self.refresh_stats()
@@ -1790,29 +1764,36 @@ class StatsScreen(ScrollableContainer):
             total_spending = float(s.query(func.sum(Payment.amount)).scalar() or 0)
             total_contracts = s.query(func.count(Contract.id)).scalar() or 0
             contract_value = float(s.query(func.sum(Contract.current_value)).scalar() or 0)
-            total_grants = s.query(func.count(Grant.id)).scalar() or 0
             total_alerts = s.query(func.count(Alert.id)).scalar() or 0
+
+            # Count debarred entities if available
+            debarred_count = 0
+            if HAS_EXTENDED_MODELS and DebarredEntity is not None:
+                try:
+                    debarred_count = s.query(func.count(DebarredEntity.id)).filter(
+                        DebarredEntity.is_active == True
+                    ).scalar() or 0
+                except Exception:
+                    pass
 
             summary_text = (
                 f"[cyan]Vendors:[/cyan] {total_vendors:,}  "
-                f"[green]HUB Certified:[/green] {hub_vendors:,}  "
+                f"[green]HUB:[/green] {hub_vendors:,}  "
                 f"[yellow]Payments:[/yellow] {total_payments:,}  "
                 f"[magenta]Spending:[/magenta] ${total_spending/1e9:.2f}B\n"
                 f"[cyan]Contracts:[/cyan] {total_contracts:,}  "
-                f"[green]Contract Value:[/green] ${contract_value/1e9:.2f}B  "
-                f"[yellow]Grants:[/yellow] {total_grants:,}  "
-                f"[red]Alerts:[/red] {total_alerts:,}"
+                f"[green]Value:[/green] ${contract_value/1e9:.2f}B  "
+                f"[red]Alerts:[/red] {total_alerts:,}  "
+                f"[yellow]Exclusions:[/yellow] {debarred_count:,}"
             )
             self.query_one("#summary-stats", Static).update(summary_text)
 
-            # === HUB Status Distribution (with Multiple Certs breakdown) ===
-            # Eligibility code mapping
+            # === HUB Status Distribution ===
             ELIGIBILITY_MAP = {
                 "HI": "Hispanic", "BL": "Black American", "WO": "Woman Owned",
                 "AS": "Asian Pacific", "AI": "American Indian", "DV": "Disabled Veteran",
             }
 
-            # Get all HUB vendors with their eligibility codes
             hub_vendors_all = s.query(Vendor).filter(
                 Vendor.hub_status.isnot(None),
                 Vendor.hub_status != "",
@@ -1823,94 +1804,24 @@ class StatsScreen(ScrollableContainer):
             hub_counts = defaultdict(int)
             for v in hub_vendors_all:
                 status = v.hub_status
-                # For "X" (Multiple Certs), use ELIGIBILITY CODE from raw_data
                 if status == "X" and v.raw_data and "ELIGIBILITY CODE" in v.raw_data:
                     elig_code = v.raw_data["ELIGIBILITY CODE"]
                     if elig_code in ELIGIBILITY_MAP:
                         hub_counts[ELIGIBILITY_MAP[elig_code]] += 1
                     else:
-                        hub_counts["Multiple Certs (Other)"] += 1
+                        hub_counts["Other"] += 1
                 else:
                     normalized = normalize_hub_status(status)
-                    if normalized != "Non-HUB" and normalized != "Unknown" and normalized != "Multiple Certs":
+                    if normalized not in ("Non-HUB", "Unknown", "Multiple Certs"):
                         hub_counts[normalized] += 1
 
-            hub_data = sorted(hub_counts.items(), key=lambda x: -x[1])[:12]
+            hub_data = sorted(hub_counts.items(), key=lambda x: -x[1])[:10]
 
             if hub_data:
-                hub_chart = create_ascii_bar_chart(
-                    hub_data,
-                    title="HUB Vendors by Ethnicity (incl. Multi-Cert breakdown)",
-                    horizontal=True
-                )
+                hub_chart = create_ascii_bar_chart(hub_data, title="HUB Vendors by Category", horizontal=True)
                 self.query_one("#hub-chart", Static).update(hub_chart)
-
-            # === HUB Status Distribution (Pie Chart) ===
-            if hub_data:
-                hub_pie = create_ascii_pie_chart(hub_data, "HUB Vendor Distribution by Ethnicity")
-                self.query_one("#hub-pie-chart", Static).update(hub_pie)
-
-            # === Spending by HUB Category (with Multi-Cert breakdown) ===
-            # Get vendors with payments and their spending
-            hub_spending_vendors = s.query(
-                Vendor, func.sum(Payment.amount).label("total")
-            ).join(Payment, Payment.vendor_id == Vendor.id).filter(
-                Vendor.hub_status.isnot(None),
-                Vendor.hub_status != "",
-                Vendor.hub_status != "Non HUB",
-                Vendor.hub_status != "N"
-            ).group_by(Vendor.id).all()
-
-            hub_spending = defaultdict(float)
-            for v, amount in hub_spending_vendors:
-                if amount:
-                    status = v.hub_status
-                    # For "X" (Multiple Certs), use ELIGIBILITY CODE
-                    if status == "X" and v.raw_data and "ELIGIBILITY CODE" in v.raw_data:
-                        elig_code = v.raw_data["ELIGIBILITY CODE"]
-                        if elig_code in ELIGIBILITY_MAP:
-                            hub_spending[ELIGIBILITY_MAP[elig_code]] += float(amount)
-                        else:
-                            hub_spending["Multiple Certs (Other)"] += float(amount)
-                    else:
-                        normalized = normalize_hub_status(status)
-                        if normalized != "Non-HUB" and normalized != "Unknown" and normalized != "Multiple Certs":
-                            hub_spending[normalized] += float(amount)
-
-            spending_data = sorted(hub_spending.items(), key=lambda x: -x[1])[:12]
-
-            if spending_data:
-                # Convert to millions for display
-                spending_data_millions = [(label, value / 1e6) for label, value in spending_data]
-                spending_chart = create_ascii_bar_chart(
-                    spending_data_millions,
-                    title="Spending by HUB Ethnicity ($M)",
-                    horizontal=True,
-                    value_suffix="M"
-                )
-                self.query_one("#hub-spending-chart", Static).update(spending_chart)
-
-            # === Payments by Fiscal Year ===
-            fy_data = s.query(
-                Payment.fiscal_year_state,
-                func.count(Payment.id),
-                func.sum(Payment.amount)
-            ).filter(
-                Payment.fiscal_year_state.isnot(None)
-            ).group_by(Payment.fiscal_year_state).order_by(
-                Payment.fiscal_year_state
-            ).all()
-
-            if fy_data:
-                # Convert to (label, value) tuples in billions
-                fy_chart_data = [(f"FY{d[0]}", float(d[2] or 0) / 1e9) for d in fy_data]
-                fy_chart = create_ascii_bar_chart(
-                    fy_chart_data,
-                    title="Spending by Fiscal Year ($B)",
-                    horizontal=False,
-                    value_suffix="B"
-                )
-                self.query_one("#fy-chart", Static).update(fy_chart)
+            else:
+                self.query_one("#hub-chart", Static).update("[dim]No HUB data available[/dim]")
 
             # === Top Agencies by Spending ===
             top_agencies = s.query(
@@ -1921,69 +1832,39 @@ class StatsScreen(ScrollableContainer):
             ).limit(10).all()
 
             if top_agencies:
-                # Convert to billions for display
                 agency_data = [((a[0] or "Unknown")[:25], float(a[1] or 0) / 1e9) for a in top_agencies]
-                agency_chart = create_ascii_bar_chart(
-                    agency_data,
-                    title="Top Agencies by Spending ($B)",
-                    horizontal=True,
-                    value_suffix="B"
-                )
+                agency_chart = create_ascii_bar_chart(agency_data, title="Top Agencies ($B)", horizontal=True, value_suffix="B")
                 self.query_one("#agency-chart", Static).update(agency_chart)
+            else:
+                self.query_one("#agency-chart", Static).update("[dim]No payment data[/dim]")
 
-            # === HUB vs Non-HUB Spending Comparison ===
-            hub_spending_total = s.query(func.sum(Payment.amount)).join(
-                Vendor, Payment.vendor_id == Vendor.id
+            # === Payments by Fiscal Year ===
+            fy_data = s.query(
+                Payment.fiscal_year_state,
+                func.sum(Payment.amount)
             ).filter(
-                Vendor.hub_status.isnot(None),
-                Vendor.hub_status != "",
-                Vendor.hub_status != "Non HUB",
-                Vendor.hub_status != "N"
-            ).scalar() or 0
+                Payment.fiscal_year_state.isnot(None)
+            ).group_by(Payment.fiscal_year_state).order_by(Payment.fiscal_year_state).all()
 
-            nonhub_spending_total = s.query(func.sum(Payment.amount)).join(
-                Vendor, Payment.vendor_id == Vendor.id
-            ).filter(
-                (Vendor.hub_status.is_(None)) |
-                (Vendor.hub_status == "") |
-                (Vendor.hub_status == "Non HUB") |
-                (Vendor.hub_status == "N")
-            ).scalar() or 0
-
-            if hub_spending_total or nonhub_spending_total:
-                hub_comparison_data = [
-                    ("HUB Certified", float(hub_spending_total) / 1e9),
-                    ("Non-HUB", float(nonhub_spending_total) / 1e9)
-                ]
-                hub_comparison_chart = create_ascii_bar_chart(
-                    hub_comparison_data,
-                    title="HUB vs Non-HUB Spending ($B)",
-                    horizontal=True,
-                    value_suffix="B"
-                )
-                self.query_one("#hub-vs-nonhub-chart", Static).update(hub_comparison_chart)
+            if fy_data:
+                fy_chart_data = [(f"FY{d[0]}", float(d[1] or 0) / 1e9) for d in fy_data[-8:]]  # Last 8 years
+                fy_chart = create_ascii_bar_chart(fy_chart_data, title="Spending by FY ($B)", horizontal=True, value_suffix="B")
+                self.query_one("#fy-chart", Static).update(fy_chart)
+            else:
+                self.query_one("#fy-chart", Static).update("[dim]No fiscal year data[/dim]")
 
             # === Payment Size Distribution ===
-            # Define size buckets
             size_buckets = [
-                ("$0-1K", 0, 1000),
-                ("$1K-10K", 1000, 10000),
-                ("$10K-100K", 10000, 100000),
-                ("$100K-1M", 100000, 1000000),
+                ("$0-1K", 0, 1000), ("$1K-10K", 1000, 10000),
+                ("$10K-100K", 10000, 100000), ("$100K-1M", 100000, 1000000),
                 ("$1M+", 1000000, float('inf'))
             ]
-
             payment_size_data = []
             for label, min_val, max_val in size_buckets:
                 if max_val == float('inf'):
-                    count = s.query(func.count(Payment.id)).filter(
-                        Payment.amount >= min_val
-                    ).scalar() or 0
+                    count = s.query(func.count(Payment.id)).filter(Payment.amount >= min_val).scalar() or 0
                 else:
-                    count = s.query(func.count(Payment.id)).filter(
-                        Payment.amount >= min_val,
-                        Payment.amount < max_val
-                    ).scalar() or 0
+                    count = s.query(func.count(Payment.id)).filter(Payment.amount >= min_val, Payment.amount < max_val).scalar() or 0
                 payment_size_data.append((label, count))
 
             if any(count > 0 for _, count in payment_size_data):
@@ -2083,159 +1964,36 @@ class StatsScreen(ScrollableContainer):
 
             if agency_risk_data:
                 agency_risk_chart_data = [(name[:25] if name else "Unknown", count) for name, count in agency_risk_data]
-                agency_risk_chart = create_ascii_bar_chart(
-                    agency_risk_chart_data,
-                    title="Top 10 Agencies by Alert Count",
-                    horizontal=True
-                )
+                agency_risk_chart = create_ascii_bar_chart(agency_risk_chart_data, title="Agencies by Alert Count", horizontal=True)
                 self.query_one("#agency-risk-chart", Static).update(agency_risk_chart)
+            else:
+                self.query_one("#agency-risk-chart", Static).update("[dim]No alert data[/dim]")
 
-            # === Alert Trend by Month (Last 12 Months) ===
-            today = datetime.now()
-            twelve_months_ago = today - relativedelta(months=12)
-
-            # Get alerts from last 12 months
-            alerts_by_month = s.query(
-                func.to_char(Alert.created_at, 'YYYY-MM').label('month'),
-                func.count(Alert.id)
+            # === HUB vs Non-HUB Spending ===
+            hub_spending = s.query(func.sum(Payment.amount)).join(
+                Vendor, Payment.vendor_id == Vendor.id
             ).filter(
-                Alert.created_at >= twelve_months_ago
-            ).group_by('month').order_by('month').all()
+                Vendor.hub_status.isnot(None), Vendor.hub_status != "",
+                Vendor.hub_status != "Non HUB", Vendor.hub_status != "N"
+            ).scalar() or 0
 
-            if alerts_by_month:
-                alert_trend_data = [(month, count) for month, count in alerts_by_month]
-                alert_trend_chart = create_ascii_bar_chart(
-                    alert_trend_data,
-                    title="Alert Count by Month",
-                    horizontal=False
-                )
-                self.query_one("#alert-trend-chart", Static).update(alert_trend_chart)
-
-            # === New Vendors per Month (Last 12 Months) ===
-            vendors_by_month = s.query(
-                func.to_char(Vendor.created_at, 'YYYY-MM').label('month'),
-                func.count(Vendor.id)
+            nonhub_spending = s.query(func.sum(Payment.amount)).join(
+                Vendor, Payment.vendor_id == Vendor.id
             ).filter(
-                Vendor.created_at >= twelve_months_ago
-            ).group_by('month').order_by('month').all()
+                (Vendor.hub_status.is_(None)) | (Vendor.hub_status == "") |
+                (Vendor.hub_status == "Non HUB") | (Vendor.hub_status == "N")
+            ).scalar() or 0
 
-            if vendors_by_month:
-                new_vendors_data = [(month, count) for month, count in vendors_by_month]
-                new_vendors_chart = create_ascii_bar_chart(
-                    new_vendors_data,
-                    title="New Vendor Registrations by Month",
-                    horizontal=False
-                )
-                self.query_one("#new-vendors-chart", Static).update(new_vendors_chart)
-
-            # === Alert Severity Distribution (Pie Chart) ===
-            alert_severity = s.query(
-                Alert.severity,
-                func.count(Alert.id)
-            ).group_by(Alert.severity).all()
-
-            if alert_severity:
-                severity_map = {
-                    AlertSeverity.HIGH: "HIGH",
-                    AlertSeverity.MEDIUM: "MEDIUM",
-                    AlertSeverity.LOW: "LOW"
-                }
-                severity_data = [(severity_map.get(sev, "Unknown"), count) for sev, count in alert_severity]
-                severity_pie = create_ascii_pie_chart(severity_data, "Alert Severity Distribution")
-                self.query_one("#alert-severity-pie-chart", Static).update(severity_pie)
+            if hub_spending or nonhub_spending:
+                hub_vs_data = [("HUB", float(hub_spending) / 1e9), ("Non-HUB", float(nonhub_spending) / 1e9)]
+                hub_vs_chart = create_ascii_bar_chart(hub_vs_data, title="HUB vs Non-HUB ($B)", horizontal=True, value_suffix="B")
+                self.query_one("#hub-vs-nonhub-chart", Static).update(hub_vs_chart)
+            else:
+                self.query_one("#hub-vs-nonhub-chart", Static).update("[dim]No spending data[/dim]")
 
             # ══════════════════════════════════════════════════════════════
-            # CROSS-REFERENCE ANALYTICS
+            # CROSS-REFERENCE DETECTION
             # ══════════════════════════════════════════════════════════════
-
-            # === Employee Data Summary ===
-            if HAS_EXTENDED_MODELS and Employee is not None:
-                try:
-                    emp_count = s.query(func.count(Employee.id)).scalar() or 0
-                    avg_salary = s.query(func.avg(Employee.annual_salary)).scalar() or 0
-                    max_salary = s.query(func.max(Employee.annual_salary)).scalar() or 0
-                    min_salary = s.query(func.min(Employee.annual_salary)).filter(Employee.annual_salary > 0).scalar() or 0
-                    total_payroll = s.query(func.sum(Employee.annual_salary)).scalar() or 0
-
-                    if emp_count > 0:
-                        emp_summary = (
-                            f"[cyan]Total Employees:[/cyan] {emp_count:,}\n"
-                            f"[green]Average Salary:[/green] ${float(avg_salary):,.0f}\n"
-                            f"[yellow]Highest Salary:[/yellow] ${float(max_salary):,.0f}\n"
-                            f"[blue]Lowest Salary:[/blue] ${float(min_salary):,.0f}\n"
-                            f"[magenta]Total Payroll:[/magenta] ${float(total_payroll)/1e9:.2f}B"
-                        )
-                    else:
-                        emp_summary = "[dim]No employee data yet. Run sync to import salary data.[/dim]"
-                    self.query_one("#employee-summary", Static).update(emp_summary)
-                except Exception:
-                    self.query_one("#employee-summary", Static).update("[dim]Employee data not available[/dim]")
-            else:
-                self.query_one("#employee-summary", Static).update("[dim]Employee model not loaded[/dim]")
-
-            # === Top Agencies by Employee Count ===
-            if HAS_EXTENDED_MODELS and Employee is not None:
-                try:
-                    emp_by_agency = s.query(
-                        Agency.name,
-                        func.count(Employee.id).label("emp_count"),
-                        func.avg(Employee.annual_salary).label("avg_sal")
-                    ).join(Agency, Employee.agency_id == Agency.id).group_by(
-                        Agency.id, Agency.name
-                    ).order_by(desc("emp_count")).limit(10).all()
-
-                    if emp_by_agency:
-                        emp_agency_data = [(name[:30] if name else "Unknown", count) for name, count, _ in emp_by_agency]
-                        emp_agency_chart = create_ascii_bar_chart(
-                            emp_agency_data,
-                            title="Top 10 Agencies by Employee Count",
-                            horizontal=True
-                        )
-                        self.query_one("#employee-agency-chart", Static).update(emp_agency_chart)
-                    else:
-                        self.query_one("#employee-agency-chart", Static).update("[dim]No employee data[/dim]")
-                except Exception:
-                    self.query_one("#employee-agency-chart", Static).update("[dim]Data not available[/dim]")
-            else:
-                self.query_one("#employee-agency-chart", Static).update("[dim]Waiting for data...[/dim]")
-
-            # === Salary Distribution ===
-            if HAS_EXTENDED_MODELS and Employee is not None:
-                try:
-                    salary_ranges = [
-                        ("$0-30K", 0, 30000),
-                        ("$30K-50K", 30000, 50000),
-                        ("$50K-75K", 50000, 75000),
-                        ("$75K-100K", 75000, 100000),
-                        ("$100K-150K", 100000, 150000),
-                        ("$150K+", 150000, float('inf')),
-                    ]
-                    salary_dist = []
-                    for label, min_sal, max_sal in salary_ranges:
-                        if max_sal == float('inf'):
-                            count = s.query(func.count(Employee.id)).filter(
-                                Employee.annual_salary >= min_sal
-                            ).scalar() or 0
-                        else:
-                            count = s.query(func.count(Employee.id)).filter(
-                                Employee.annual_salary >= min_sal,
-                                Employee.annual_salary < max_sal
-                            ).scalar() or 0
-                        salary_dist.append((label, count))
-
-                    if any(c > 0 for _, c in salary_dist):
-                        salary_chart = create_ascii_bar_chart(
-                            salary_dist,
-                            title="Employee Salary Distribution",
-                            horizontal=True
-                        )
-                        self.query_one("#salary-dist-chart", Static).update(salary_chart)
-                    else:
-                        self.query_one("#salary-dist-chart", Static).update("[dim]No salary data[/dim]")
-                except Exception:
-                    self.query_one("#salary-dist-chart", Static).update("[dim]Data not available[/dim]")
-            else:
-                self.query_one("#salary-dist-chart", Static).update("[dim]Waiting for data...[/dim]")
 
             # === Employee-Vendor Name Matches ===
             if HAS_EXTENDED_MODELS and EntityMatch is not None:
@@ -2266,56 +2024,6 @@ class StatsScreen(ScrollableContainer):
                     self.query_one("#employee-vendor-matches", Static).update("[dim]Data not available[/dim]")
             else:
                 self.query_one("#employee-vendor-matches", Static).update("[dim]Waiting for data...[/dim]")
-
-            # === Campaign Finance Summary ===
-            if HAS_EXTENDED_MODELS and CampaignContribution is not None:
-                try:
-                    contrib_count = s.query(func.count(CampaignContribution.id)).scalar() or 0
-                    total_contributions = s.query(func.sum(CampaignContribution.contribution_amount)).scalar() or 0
-                    avg_contribution = s.query(func.avg(CampaignContribution.contribution_amount)).scalar() or 0
-                    unique_contributors = s.query(func.count(func.distinct(CampaignContribution.contributor_normalized))).scalar() or 0
-                    unique_filers = s.query(func.count(func.distinct(CampaignContribution.filer_name))).scalar() or 0
-
-                    if contrib_count > 0:
-                        camp_summary = (
-                            f"[cyan]Total Contributions:[/cyan] {contrib_count:,}\n"
-                            f"[green]Total Amount:[/green] ${float(total_contributions):,.0f}\n"
-                            f"[yellow]Average Contribution:[/yellow] ${float(avg_contribution):,.0f}\n"
-                            f"[blue]Unique Contributors:[/blue] {unique_contributors:,}\n"
-                            f"[magenta]Unique Recipients (Filers):[/magenta] {unique_filers:,}"
-                        )
-                    else:
-                        camp_summary = "[dim]No campaign finance data yet. Run sync to import TEC data.[/dim]"
-                    self.query_one("#campaign-summary", Static).update(camp_summary)
-                except Exception:
-                    self.query_one("#campaign-summary", Static).update("[dim]Data not available[/dim]")
-            else:
-                self.query_one("#campaign-summary", Static).update("[dim]Waiting for data...[/dim]")
-
-            # === Top Campaign Contributors ===
-            if HAS_EXTENDED_MODELS and CampaignContribution is not None:
-                try:
-                    top_contributors = s.query(
-                        CampaignContribution.contributor_name,
-                        func.sum(CampaignContribution.contribution_amount).label("total")
-                    ).group_by(
-                        CampaignContribution.contributor_normalized
-                    ).order_by(desc("total")).limit(10).all()
-
-                    if top_contributors:
-                        contrib_data = [(name[:25] if name else "Unknown", float(total)/1000) for name, total in top_contributors]
-                        contrib_chart = create_ascii_bar_chart(
-                            contrib_data,
-                            title="Top 10 Campaign Contributors ($K)",
-                            horizontal=True
-                        )
-                        self.query_one("#top-contributors-chart", Static).update(contrib_chart)
-                    else:
-                        self.query_one("#top-contributors-chart", Static).update("[dim]No contribution data[/dim]")
-                except Exception:
-                    self.query_one("#top-contributors-chart", Static).update("[dim]Data not available[/dim]")
-            else:
-                self.query_one("#top-contributors-chart", Static).update("[dim]Waiting for data...[/dim]")
 
             # === Pay-to-Play Detection ===
             if HAS_EXTENDED_MODELS and CampaignContribution is not None:
@@ -2363,42 +2071,6 @@ class StatsScreen(ScrollableContainer):
                     self.query_one("#pay-to-play-chart", Static).update(f"[dim]Analysis pending data sync[/dim]")
             else:
                 self.query_one("#pay-to-play-chart", Static).update("[dim]Waiting for data...[/dim]")
-
-            # === Tax Permit Status of Vendors ===
-            if HAS_EXTENDED_MODELS and TaxPermit is not None:
-                try:
-                    permit_count = s.query(func.count(TaxPermit.id)).scalar() or 0
-                    unique_taxpayers = s.query(func.count(func.distinct(TaxPermit.taxpayer_normalized))).scalar() or 0
-
-                    # Count vendors that match tax permits
-                    vendors_with_permits = s.query(func.count(func.distinct(Vendor.id))).join(
-                        TaxPermit, Vendor.name_normalized == TaxPermit.taxpayer_normalized
-                    ).scalar() or 0
-
-                    vendors_without_permits = total_vendors - vendors_with_permits
-
-                    if permit_count > 0:
-                        # Create pie chart for permit status
-                        permit_pie_data = [
-                            ("With Permits", vendors_with_permits),
-                            ("Without Permits", vendors_without_permits),
-                        ]
-                        permit_pie = create_ascii_pie_chart(permit_pie_data, "Vendor Tax Permit Status")
-
-                        permit_pct = (vendors_with_permits / total_vendors * 100) if total_vendors > 0 else 0
-                        permit_status = (
-                            f"[cyan]Tax Permits on File:[/cyan] {permit_count:,}\n"
-                            f"[green]Vendors with Permits:[/green] {vendors_with_permits:,} ({permit_pct:.1f}%)\n"
-                            f"[red]Vendors WITHOUT Permits:[/red] {vendors_without_permits:,} ({100-permit_pct:.1f}%)\n\n"
-                        )
-                        permit_status += permit_pie
-                    else:
-                        permit_status = "[dim]No tax permit data yet. Run sync to import.[/dim]"
-                    self.query_one("#tax-permit-status", Static).update(permit_status)
-                except Exception:
-                    self.query_one("#tax-permit-status", Static).update("[dim]Data not available[/dim]")
-            else:
-                self.query_one("#tax-permit-status", Static).update("[dim]Waiting for data...[/dim]")
 
             # === Ghost Vendor Indicators ===
             try:
@@ -2477,79 +2149,8 @@ class StatsScreen(ScrollableContainer):
             except Exception:
                 self.query_one("#fy-end-spending-chart", Static).update("[dim]Data not available[/dim]")
 
-            # === Cross-Reference Matches Summary ===
-            if HAS_EXTENDED_MODELS and EntityMatch is not None:
-                try:
-                    total_matches = s.query(func.count(EntityMatch.id)).scalar() or 0
-                    confirmed_matches = s.query(func.count(EntityMatch.id)).filter(
-                        EntityMatch.is_confirmed == True
-                    ).scalar() or 0
-
-                    # Group by match types
-                    match_types = s.query(
-                        EntityMatch.match_type,
-                        func.count(EntityMatch.id)
-                    ).group_by(EntityMatch.match_type).all()
-
-                    if total_matches > 0:
-                        crossref_text = (
-                            f"[cyan]Total Entity Matches Found:[/cyan] {total_matches:,}\n"
-                            f"[green]Confirmed Matches:[/green] {confirmed_matches:,}\n\n"
-                            f"[yellow]Matches by Type:[/yellow]\n"
-                        )
-                        for match_type, count in match_types:
-                            crossref_text += f"  • {match_type}: {count:,}\n"
-                    else:
-                        crossref_text = "[dim]No cross-reference matches found yet.\nRun detection analysis to find entity connections.[/dim]"
-                    self.query_one("#crossref-summary", Static).update(crossref_text)
-                except Exception:
-                    self.query_one("#crossref-summary", Static).update("[dim]Data not available[/dim]")
-            else:
-                self.query_one("#crossref-summary", Static).update("[dim]Waiting for data...[/dim]")
-
-            # === High-Value Vendors Without Tax Permits ===
-            if HAS_EXTENDED_MODELS and TaxPermit is not None:
-                try:
-                    # Find top vendors by payment amount who don't have matching tax permits
-                    high_value_no_permit = s.query(
-                        Vendor.name,
-                        func.sum(Payment.amount).label("total_payments")
-                    ).join(Payment, Payment.vendor_id == Vendor.id).outerjoin(
-                        TaxPermit, Vendor.name_normalized == TaxPermit.taxpayer_normalized
-                    ).filter(
-                        TaxPermit.id.is_(None)  # No matching tax permit
-                    ).group_by(Vendor.id, Vendor.name).having(
-                        func.sum(Payment.amount) > 100000  # Over $100K
-                    ).order_by(desc("total_payments")).limit(10).all()
-
-                    if high_value_no_permit:
-                        # Create bar chart
-                        no_permit_data = [
-                            (name[:20] if name else "Unknown", float(total) / 1e6)
-                            for name, total in high_value_no_permit
-                        ]
-                        no_permit_chart = create_ascii_bar_chart(
-                            no_permit_data,
-                            title="Payments to Vendors Without Tax Permits ($M)",
-                            horizontal=True,
-                            value_suffix="M"
-                        )
-
-                        total_at_risk = sum(float(t) for _, t in high_value_no_permit)
-                        no_permit_text = f"[red]⚠ {len(high_value_no_permit)} HIGH-VALUE VENDORS WITHOUT TAX PERMITS[/red]\n\n"
-                        no_permit_text += f"[yellow]Total at Risk:[/yellow] ${total_at_risk:,.0f}\n\n"
-                        no_permit_text += no_permit_chart
-                        no_permit_text += "\n[dim]These vendors received significant payments but have no matching tax permit.[/dim]"
-                    else:
-                        no_permit_text = "[green]All high-value vendors have tax permits[/green]\n[dim]Or tax permit data not yet loaded[/dim]"
-                    self.query_one("#vendors-no-permit-chart", Static).update(no_permit_text)
-                except Exception:
-                    self.query_one("#vendors-no-permit-chart", Static).update("[dim]Analysis pending data sync[/dim]")
-            else:
-                self.query_one("#vendors-no-permit-chart", Static).update("[dim]Waiting for data...[/dim]")
-
             # ══════════════════════════════════════════════════════════════
-            # DEBARMENT & SAM.GOV EXCLUSION SCREENING
+            # DEBARMENT SCREENING
             # ══════════════════════════════════════════════════════════════
 
             # === SAM.gov Exclusions Summary ===
@@ -2578,61 +2179,6 @@ class StatsScreen(ScrollableContainer):
                     self.query_one("#debarment-summary", Static).update("[dim]Data not available[/dim]")
             else:
                 self.query_one("#debarment-summary", Static).update("[dim]Waiting for data...[/dim]")
-
-            # === Exclusions by Type ===
-            if HAS_EXTENDED_MODELS and DebarredEntity is not None:
-                try:
-                    exclusion_types = s.query(
-                        DebarredEntity.exclusion_type,
-                        func.count(DebarredEntity.id)
-                    ).filter(
-                        DebarredEntity.is_active == True
-                    ).group_by(DebarredEntity.exclusion_type).order_by(
-                        desc(func.count(DebarredEntity.id))
-                    ).limit(10).all()
-
-                    if exclusion_types:
-                        type_data = [(t[:25] if t else "Unknown", c) for t, c in exclusion_types]
-                        type_chart = create_ascii_bar_chart(
-                            type_data,
-                            title="Active Exclusions by Type",
-                            horizontal=True
-                        )
-                        self.query_one("#exclusion-type-chart", Static).update(type_chart)
-                    else:
-                        self.query_one("#exclusion-type-chart", Static).update("[dim]No exclusion data[/dim]")
-                except Exception:
-                    self.query_one("#exclusion-type-chart", Static).update("[dim]Data not available[/dim]")
-            else:
-                self.query_one("#exclusion-type-chart", Static).update("[dim]Waiting for data...[/dim]")
-
-            # === Exclusions by Agency ===
-            if HAS_EXTENDED_MODELS and DebarredEntity is not None:
-                try:
-                    exclusion_agencies = s.query(
-                        DebarredEntity.excluding_agency,
-                        func.count(DebarredEntity.id)
-                    ).filter(
-                        DebarredEntity.is_active == True,
-                        DebarredEntity.excluding_agency.isnot(None)
-                    ).group_by(DebarredEntity.excluding_agency).order_by(
-                        desc(func.count(DebarredEntity.id))
-                    ).limit(10).all()
-
-                    if exclusion_agencies:
-                        agency_data = [(a[:30] if a else "Unknown", c) for a, c in exclusion_agencies]
-                        agency_chart = create_ascii_bar_chart(
-                            agency_data,
-                            title="Top 10 Excluding Agencies",
-                            horizontal=True
-                        )
-                        self.query_one("#exclusion-agency-chart", Static).update(agency_chart)
-                    else:
-                        self.query_one("#exclusion-agency-chart", Static).update("[dim]No agency data[/dim]")
-                except Exception:
-                    self.query_one("#exclusion-agency-chart", Static).update("[dim]Data not available[/dim]")
-            else:
-                self.query_one("#exclusion-agency-chart", Static).update("[dim]Waiting for data...[/dim]")
 
             # === Debarment Alerts ===
             try:
