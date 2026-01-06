@@ -50,7 +50,9 @@ class SyncRunner:
             "tax_permits",
             "campaign_finance",
             "sam_exclusions",
-            # Note: comptroller_payments disabled - datasets no longer available on data.texas.gov
+            "txdot_bids",
+            "txdot_contracts",
+            # Note: hhs_contracts disabled - site blocks automated access
         ]
         self.tasks: dict[str, SyncTask] = {}
         self.lock = threading.Lock()
@@ -203,6 +205,33 @@ class SyncRunner:
                 task.records = count
                 task.status = "success"
                 task.message = f"Imported {count:,} exclusions"
+
+            elif source == "txdot_bids":
+                from texasaudit.ingestion.txdot import TxDOTBidIngestor
+                task.message = "Downloading TxDOT bid tabulations..."
+                ingestor = TxDOTBidIngestor()
+                count = ingestor.sync()
+                task.records = count
+                task.status = "success"
+                task.message = f"Imported {count:,} bids"
+
+            elif source == "txdot_contracts":
+                from texasaudit.ingestion.txdot import TxDOTContractIngestor
+                task.message = "Downloading TxDOT contract data..."
+                ingestor = TxDOTContractIngestor()
+                count = ingestor.sync()
+                task.records = count
+                task.status = "success"
+                task.message = f"Imported {count:,} contracts"
+
+            elif source == "hhs_contracts":
+                from texasaudit.ingestion.hhs_contracts import HHSContractsIngestor
+                task.message = "Scraping HHS contracts..."
+                ingestor = HHSContractsIngestor()
+                count = ingestor.sync()
+                task.records = count
+                task.status = "success"
+                task.message = f"Imported {count:,} contracts"
 
         except Exception as e:
             task.status = "failed"

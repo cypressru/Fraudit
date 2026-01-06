@@ -637,3 +637,93 @@ class DebarredEntity(Base):
 
     def __repr__(self) -> str:
         return f"<DebarredEntity {self.source}: {self.entity_name}>"
+
+
+class ConstructionBid(Base):
+    """Construction project bid from TxDOT or other agencies."""
+    __tablename__ = "construction_bids"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String(50), index=True, comment="CSJ or project identifier"
+    )
+    contractor_name: Mapped[str] = mapped_column(String(500), index=True)
+    contractor_normalized: Mapped[Optional[str]] = mapped_column(
+        String(500), index=True, comment="Normalized for matching"
+    )
+    vendor_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("vendors.id"), index=True, comment="Linked vendor if matched"
+    )
+    bid_amount: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(15, 2), index=True, comment="Total bid amount"
+    )
+    engineer_estimate: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(15, 2), comment="Engineer's estimate for project"
+    )
+    bid_rank: Mapped[Optional[int]] = mapped_column(
+        Integer, comment="Rank among bidders (1=lowest)"
+    )
+    is_winner: Mapped[bool] = mapped_column(
+        Boolean, default=False, index=True, comment="Won the contract"
+    )
+    letting_date: Mapped[Optional[date]] = mapped_column(Date, index=True)
+    county: Mapped[Optional[str]] = mapped_column(String(100))
+    district: Mapped[Optional[str]] = mapped_column(String(100))
+    project_description: Mapped[Optional[str]] = mapped_column(Text)
+    work_type: Mapped[Optional[str]] = mapped_column(String(200))
+    source: Mapped[str] = mapped_column(
+        String(50), default="txdot", comment="txdot, city, county, etc."
+    )
+    raw_data: Mapped[Optional[dict]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+    # Relationships
+    vendor: Mapped[Optional["Vendor"]] = relationship()
+
+    __table_args__ = (
+        Index("ix_bids_project_contractor", "project_id", "contractor_normalized"),
+        Index("ix_bids_letting", "letting_date", "is_winner"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ConstructionBid {self.project_id}: {self.contractor_name} ${self.bid_amount}>"
+
+
+class HHSContract(Base):
+    """Health and Human Services contract."""
+    __tablename__ = "hhs_contracts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    contract_number: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    vendor_name: Mapped[str] = mapped_column(String(500), index=True)
+    vendor_normalized: Mapped[Optional[str]] = mapped_column(
+        String(500), index=True, comment="Normalized for matching"
+    )
+    vendor_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("vendors.id"), index=True, comment="Linked vendor if matched"
+    )
+    solicitation_number: Mapped[Optional[str]] = mapped_column(String(100))
+    start_date: Mapped[Optional[date]] = mapped_column(Date, index=True)
+    end_date: Mapped[Optional[date]] = mapped_column(Date)
+    contract_type: Mapped[Optional[str]] = mapped_column(String(100))
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    max_value: Mapped[Optional[Decimal]] = mapped_column(Numeric(15, 2))
+    agency: Mapped[str] = mapped_column(
+        String(50), default="hhsc", comment="hhsc, dshs, dfps, etc."
+    )
+    raw_data: Mapped[Optional[dict]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+    # Relationships
+    vendor: Mapped[Optional["Vendor"]] = relationship()
+
+    __table_args__ = (
+        Index("ix_hhs_vendor_dates", "vendor_normalized", "start_date"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<HHSContract {self.contract_number}: {self.vendor_name}>"

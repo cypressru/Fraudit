@@ -270,7 +270,8 @@ class SyncPanel(Static):
             sources = [
                 "cmbl", "socrata_payments", "lbb_contracts", "usaspending",
                 "txsmartbuy", "sam_exclusions", "employee_salaries",
-                "campaign_finance", "tax_permits"
+                "campaign_finance", "tax_permits", "txdot_bids",
+                "txdot_contracts"
             ]
             lines = []
 
@@ -1717,7 +1718,7 @@ class StatsScreen(ScrollableContainer):
         yield Static("[b]ALERT DISTRIBUTION BY TYPE[/b]", classes="section-title")
         yield Static("", id="alert-chart", classes="chart-box")
         yield Rule()
-        yield Static("[b]AGENCY RISK RANKING[/b]", classes="section-title")
+        yield Static("[b]ALERTS BY SEVERITY[/b]", classes="section-title")
         yield Static("", id="agency-risk-chart", classes="chart-box")
         yield Rule()
 
@@ -1945,51 +1946,60 @@ class StatsScreen(ScrollableContainer):
                 )
                 self.query_one("#alert-chart", Static).update(alert_chart)
 
-            # === Agency Risk Ranking ===
-            # Count alerts per agency by looking at vendor alerts and their payments
-            from sqlalchemy import literal
-            agency_risk_data = s.query(
-                Agency.name,
-                func.count(func.distinct(Alert.id)).label("alert_count")
-            ).join(Payment, Payment.agency_id == Agency.id).join(
-                Vendor, Vendor.id == Payment.vendor_id
-            ).join(
-                Alert, and_(
-                    Alert.entity_type == literal("vendor"),
-                    Alert.entity_id == Vendor.id
+            # === Alert Severity Breakdown ===
+            severity_data = s.query(
+                Alert.severity,
+                func.count(Alert.id).label("count")
+            ).group_by(Alert.severity).all()
+
+            if severity_data:
+                severity_labels = {
+                    AlertSeverity.HIGH: "[red]HIGH[/red]",
+                    AlertSeverity.MEDIUM: "[yellow]MEDIUM[/yellow]",
+                    AlertSeverity.LOW: "[dim]LOW[/dim]",
+                }
+                severity_chart_data = [
+                    (severity_labels.get(sev, str(sev)), count)
+                    for sev, count in sorted(severity_data, key=lambda x: x[1], reverse=True)
+                ]
+                severity_chart = create_ascii_bar_chart(
+                    severity_chart_data,
+                    title="Alerts by Severity",
+                    horizontal=True
                 )
-            ).group_by(Agency.id, Agency.name).order_by(
-                desc("alert_count")
-            ).limit(10).all()
-
-            if agency_risk_data:
-                agency_risk_chart_data = [(name[:25] if name else "Unknown", count) for name, count in agency_risk_data]
-                agency_risk_chart = create_ascii_bar_chart(agency_risk_chart_data, title="Agencies by Alert Count", horizontal=True)
-                self.query_one("#agency-risk-chart", Static).update(agency_risk_chart)
+                self.query_one("#agency-risk-chart", Static).update(severity_chart)
             else:
-                self.query_one("#agency-risk-chart", Static).update("[dim]No alert data[/dim]")
+                self.query_one("#agency-risk-chart", Static).update("[dim]No alerts - run detection analysis[/dim]")
 
-            # === HUB vs Non-HUB Spending ===
-            hub_spending = s.query(func.sum(Payment.amount)).join(
-                Vendor, Payment.vendor_id == Vendor.id
-            ).filter(
-                Vendor.hub_status.isnot(None), Vendor.hub_status != "",
-                Vendor.hub_status != "Non HUB", Vendor.hub_status != "N"
+            # === HUB vs Non-HUB Vendor Count ===
+            # Note: Payment-vendor linkage not available, showing vendor counts instead
+            hub_vendors = s.query(func.count(Vendor.id)).filter(
+                Vendor.hub_status.isnot(None),
+                Vendor.hub_status != "",
+                ~Vendor.hub_status.in_(["N", "N/A", "Non HUB", "X"])
             ).scalar() or 0
 
-            nonhub_spending = s.query(func.sum(Payment.amount)).join(
-                Vendor, Payment.vendor_id == Vendor.id
-            ).filter(
-                (Vendor.hub_status.is_(None)) | (Vendor.hub_status == "") |
-                (Vendor.hub_status == "Non HUB") | (Vendor.hub_status == "N")
+            nonhub_vendors = s.query(func.count(Vendor.id)).filter(
+                (Vendor.hub_status.is_(None)) |
+                (Vendor.hub_status == "") |
+                (Vendor.hub_status.in_(["N", "N/A", "Non HUB", "X"]))
             ).scalar() or 0
 
-            if hub_spending or nonhub_spending:
-                hub_vs_data = [("HUB", float(hub_spending) / 1e9), ("Non-HUB", float(nonhub_spending) / 1e9)]
-                hub_vs_chart = create_ascii_bar_chart(hub_vs_data, title="HUB vs Non-HUB ($B)", horizontal=True, value_suffix="B")
+            if hub_vendors or nonhub_vendors:
+                total = hub_vendors + nonhub_vendors
+                hub_pct = (hub_vendors / total * 100) if total > 0 else 0
+                hub_vs_data = [
+                    (f"HUB ({hub_pct:.1f}%)", hub_vendors),
+                    (f"Non-HUB ({100-hub_pct:.1f}%)", nonhub_vendors)
+                ]
+                hub_vs_chart = create_ascii_bar_chart(
+                    hub_vs_data,
+                    title="HUB vs Non-HUB Vendors",
+                    horizontal=True
+                )
                 self.query_one("#hub-vs-nonhub-chart", Static).update(hub_vs_chart)
             else:
-                self.query_one("#hub-vs-nonhub-chart", Static).update("[dim]No spending data[/dim]")
+                self.query_one("#hub-vs-nonhub-chart", Static).update("[dim]No vendor data[/dim]")
 
             # ══════════════════════════════════════════════════════════════
             # CROSS-REFERENCE DETECTION

@@ -349,7 +349,7 @@ mkdir -p "$SCRIPT_DIR/data/reports"
 echo -e "\n${CYAN}[5/6] Initializing database tables...${NC}"
 
 TABLE_COUNT=$(psql -d texasaudit -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null || echo "0")
-EXPECTED_TABLES=15  # Updated count with debarred_entities
+EXPECTED_TABLES=17  # Updated count with construction_bids, hhs_contracts
 
 if [ "$TABLE_COUNT" -ge "$EXPECTED_TABLES" ]; then
     echo -e "${GREEN}All database tables exist ($TABLE_COUNT tables)${NC}"

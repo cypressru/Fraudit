@@ -10,6 +10,9 @@ from .salaries import SalariesIngestor
 from .taxpermits import TaxPermitsIngestor
 from .comptroller import ComptrollerPaymentsIngestor
 from .ethics import EthicsIngestor
+from .sam_exclusions import SAMExclusionsIngestor
+from .txdot import TxDOTBidIngestor, TxDOTContractIngestor
+from .hhs_contracts import HHSContractsIngestor
 
 
 def run_sync(sources: list[str] | None = None, full: bool = False) -> dict:
@@ -35,6 +38,10 @@ def run_sync(sources: list[str] | None = None, full: bool = False) -> dict:
         "tax_permits": TaxPermitsIngestor,
         "comptroller_payments": ComptrollerPaymentsIngestor,
         "campaign_finance": EthicsIngestor,
+        "sam_exclusions": SAMExclusionsIngestor,
+        "txdot_bids": TxDOTBidIngestor,
+        "txdot_contracts": TxDOTContractIngestor,
+        "hhs_contracts": HHSContractsIngestor,
     }
 
     if sources is None:
@@ -67,5 +74,9 @@ __all__ = [
     "TaxPermitsIngestor",
     "ComptrollerPaymentsIngestor",
     "EthicsIngestor",
+    "SAMExclusionsIngestor",
+    "TxDOTBidIngestor",
+    "TxDOTContractIngestor",
+    "HHSContractsIngestor",
     "run_sync",
 ]
