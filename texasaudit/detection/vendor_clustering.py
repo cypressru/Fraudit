@@ -147,7 +147,10 @@ def _detect_same_address(session) -> int:
 
 
 def _detect_similar_names(session, threshold: float) -> int:
-    """Find vendors with suspiciously similar names."""
+    """Find vendors with suspiciously similar names using parallel processing."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import threading
+
     alerts_created = 0
 
     # Get all vendor names
@@ -157,33 +160,54 @@ def _detect_similar_names(session, threshold: float) -> int:
 
     vendor_names = [(v.id, v.name_normalized) for v in vendors]
 
-    # This is O(n^2) - for large datasets, use blocking/indexing
-    # For now, sample if too many
-    if len(vendor_names) > 10000:
+    # Sample if too many (but use larger sample with parallel processing)
+    if len(vendor_names) > 20000:
         import random
-        vendor_names = random.sample(vendor_names, 10000)
+        vendor_names = random.sample(vendor_names, 20000)
 
-    # Find similar pairs
-    similar_pairs = []
+    print(f"      Comparing {len(vendor_names):,} vendor names...")
+
+    # Build lookup structures
     name_to_id = {name: vid for vid, name in vendor_names}
     names = [name for _, name in vendor_names]
 
-    for vid, name in vendor_names:
-        # Find matches above threshold
-        matches = process.extract(
-            name, names,
-            scorer=fuzz.ratio,
-            score_cutoff=int(threshold * 100),
-            limit=10,
-        )
+    # Process in parallel batches
+    similar_pairs = []
+    pairs_lock = threading.Lock()
 
-        for match_name, score, _ in matches:
-            if match_name == name:
-                continue
+    def process_batch(batch):
+        """Process a batch of vendors for name matching."""
+        batch_pairs = []
+        for vid, name in batch:
+            matches = process.extract(
+                name, names,
+                scorer=fuzz.ratio,
+                score_cutoff=int(threshold * 100),
+                limit=10,
+            )
 
-            match_id = name_to_id.get(match_name)
-            if match_id and vid < match_id:  # Avoid duplicates
-                similar_pairs.append((vid, match_id, score / 100.0))
+            for match_name, score, _ in matches:
+                if match_name == name:
+                    continue
+
+                match_id = name_to_id.get(match_name)
+                if match_id and vid < match_id:  # Avoid duplicates
+                    batch_pairs.append((vid, match_id, score / 100.0))
+        return batch_pairs
+
+    # Split into batches
+    batch_size = 500
+    batches = [vendor_names[i:i + batch_size] for i in range(0, len(vendor_names), batch_size)]
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(process_batch, batch) for batch in batches]
+
+        for future in as_completed(futures):
+            batch_pairs = future.result()
+            with pairs_lock:
+                similar_pairs.extend(batch_pairs)
+
+    print(f"      Found {len(similar_pairs):,} similar name pairs...")
 
     # Record relationships and create alerts
     for v1_id, v2_id, confidence in similar_pairs:

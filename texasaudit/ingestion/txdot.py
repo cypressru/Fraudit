@@ -274,13 +274,14 @@ class TxDOTContractIngestor(BaseIngestor):
     def _process_contract_batch(self, records: list[dict]) -> int:
         """Process a batch of contract records."""
         count = 0
+        seen_contracts = set()  # Track contracts within this batch
 
         with get_session() as session:
             # Get or create TxDOT agency
             txdot_agency = self._get_txdot_agency(session)
 
             for record in records:
-                contract = self._create_contract(session, record, txdot_agency)
+                contract = self._create_contract(session, record, txdot_agency, seen_contracts)
                 if contract:
                     count += 1
 
@@ -302,7 +303,7 @@ class TxDOTContractIngestor(BaseIngestor):
 
         return agency
 
-    def _create_contract(self, session, record: dict, agency: Agency) -> Optional[Contract]:
+    def _create_contract(self, session, record: dict, agency: Agency, seen_contracts: set) -> Optional[Contract]:
         """Create a contract record from TxDOT recapitulation data."""
         # Extract contract number
         contract_number = record.get("contract_number", "")
@@ -315,7 +316,12 @@ class TxDOTContractIngestor(BaseIngestor):
         # Make contract number unique to TxDOT with CSJ
         unique_contract_num = f"TXDOT-{contract_number}-{ccsj}" if ccsj else f"TXDOT-{contract_number}"
 
-        # Check for duplicate
+        # Check for duplicate in current batch
+        if unique_contract_num in seen_contracts:
+            return None
+        seen_contracts.add(unique_contract_num)
+
+        # Check for duplicate in database
         existing = session.query(Contract).filter(
             Contract.contract_number == unique_contract_num
         ).first()
